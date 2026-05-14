@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"g:\\\\Study\\\\DHMT\\\\Assignment\" -Force)",
+      "Bash(Select-Object Mode, Name)",
+      "Bash(git -C \"g:/Study/DHMT/Assignment\" remote -v)"
+    ]
+  }
+}
