@@ -138,7 +138,7 @@ static int smooth_shading  = 1;
 #define G2_RING_R  0.78f
 #define G2_TUBE_R  0.08f
 #define G2_PIN_R   0.06f
-#define G2_PIN_H   0.25f
+#define G2_PIN_H   0.8f
 
 /* ---- AXIS (Truc) ---- */
 /* Very thin red rod — barely visible in demo */
@@ -225,18 +225,18 @@ static void drawGimbal1(void) {
         drawTorus(G1_TUBE_R, G1_RING_R, SL);
     glPopMatrix();
 
-    /* Top pin at (0, +G1_RING_R, 0) extending toward viewer along +Z */
+    /* Top pin at (0, +G1_RING_R, 0) extending INWARD downward along -Y */
     glPushMatrix();
         glTranslatef(0.0f, G1_RING_R, 0.0f);
-        glRotatef(90.0f, 1.0f, 0.0f, 0.0f);   /* 90 deg around X: +Y -> +Z */
-        drawCylinder(G2_PIN_R, G2_PIN_H, 16);
+        glRotatef(180.0f, 1.0f, 0.0f, 0.0f);  /* flip +Y -> -Y (inward toward center) */
+        drawCylinder(G2_PIN_R, 0.3f , 16);
     glPopMatrix();
 
-    /* Bottom pin at (0, -G1_RING_R, 0) extending away from viewer along -Z */
+    /* Bottom pin at (0, -G1_RING_R, 0) extending INWARD upward along +Y */
     glPushMatrix();
         glTranslatef(0.0f, -G1_RING_R, 0.0f);
-        glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);  /* -90 deg around X: +Y -> -Z */
-        drawCylinder(G2_PIN_R, G2_PIN_H, 16);
+        /* no rotation — drawCylinder extends in +Y (inward toward center) */
+        drawCylinder(G2_PIN_R, 0.3f, 16);
     glPopMatrix();
 }
 
@@ -269,109 +269,131 @@ static void drawGimbal2(void) {
     glPopMatrix();
 }
 
-/* --- AXIS (Truc) ---
-   Red vertical rod through gimbal 2 centre.
-   Extends +- AXIS_H/2 from gimbal 2 origin so it stays inside the rings. */
-static void drawAxis(void) {
-    glColor3f(0.90f, 0.10f, 0.10f);   /* red */
-    glPushMatrix();
-        glTranslatef(0.0f, -AXIS_H * 0.5f, 0.0f);
-        drawCylinder(AXIS_R, AXIS_H, 16);
-    glPopMatrix();
+/* Helper: draw all 6 faces of an axis-aligned box.
+   Box spans x:[x0,x1], y:[y0,y1], z:[z0,z1]. */
+static void drawBox3D(float x0, float y0, float z0,
+                      float x1, float y1, float z1) {
+    glBegin(GL_QUADS);
+        /* Top (+Y) */
+        glNormal3f( 0, 1, 0);
+        glVertex3f(x0,y1,z0); glVertex3f(x1,y1,z0);
+        glVertex3f(x1,y1,z1); glVertex3f(x0,y1,z1);
+        /* Bottom (-Y) */
+        glNormal3f( 0,-1, 0);
+        glVertex3f(x0,y0,z1); glVertex3f(x1,y0,z1);
+        glVertex3f(x1,y0,z0); glVertex3f(x0,y0,z0);
+        /* Front (+Z) */
+        glNormal3f( 0, 0, 1);
+        glVertex3f(x0,y0,z1); glVertex3f(x0,y1,z1);
+        glVertex3f(x1,y1,z1); glVertex3f(x1,y0,z1);
+        /* Back (-Z) */
+        glNormal3f( 0, 0,-1);
+        glVertex3f(x1,y0,z0); glVertex3f(x1,y1,z0);
+        glVertex3f(x0,y1,z0); glVertex3f(x0,y0,z0);
+        /* Right (+X) */
+        glNormal3f( 1, 0, 0);
+        glVertex3f(x1,y0,z0); glVertex3f(x1,y0,z1);
+        glVertex3f(x1,y1,z1); glVertex3f(x1,y1,z0);
+        /* Left (-X) */
+        glNormal3f(-1, 0, 0);
+        glVertex3f(x0,y0,z1); glVertex3f(x0,y0,z0);
+        glVertex3f(x0,y1,z0); glVertex3f(x0,y1,z1);
+    glEnd();
+}
+/* Rhombus prism: 6-faced 3D solid with rhombus cross-section.
+   Vertices (x0,y0)..(x3,y3) in CW order viewed from +Z.
+   Front face at z=zF, back face at z=zF-d.
+   Side normals: left-perpendicular of each CW edge = outward. */
+static void drawRhombusPrism(
+    float x0, float y0, float x1, float y1,
+    float x2, float y2, float x3, float y3,
+    float zF, float d)
+{
+    float zB = zF - d;
+    float dx, dy, len;
+
+    glBegin(GL_QUADS);
+        /* Front face (+Z) */
+        glNormal3f(0,0,1);
+        glVertex3f(x0,y0,zF); glVertex3f(x1,y1,zF);
+        glVertex3f(x2,y2,zF); glVertex3f(x3,y3,zF);
+        /* Back face (-Z, reversed winding) */
+        glNormal3f(0,0,-1);
+        glVertex3f(x3,y3,zB); glVertex3f(x2,y2,zB);
+        glVertex3f(x1,y1,zB); glVertex3f(x0,y0,zB);
+    glEnd();
+
+/* Side face: left-perp of CW edge direction = outward normal */
+#define RSIDE(ax,ay,bx,by) \
+    dx=(bx)-(ax); dy=(by)-(ay); len=sqrtf(dx*dx+dy*dy); \
+    if(len>1e-6f){dx/=len; dy/=len;} \
+    glNormal3f(-dy, dx, 0.0f); \
+    glBegin(GL_QUADS); \
+        glVertex3f(ax,ay,zF); glVertex3f(bx,by,zF); \
+        glVertex3f(bx,by,zB); glVertex3f(ax,ay,zB); \
+    glEnd()
+
+    RSIDE(x0,y0, x1,y1);
+    RSIDE(x1,y1, x2,y2);
+    RSIDE(x2,y2, x3,y3);
+    RSIDE(x3,y3, x0,y0);
+#undef RSIDE
 }
 
 /* --- ROTOR (Dia quay) ---
-   Blue flat disc centred at gimbal 2 origin.
-   Spins around Y axis (the axis rod) when key 7/8 pressed.
-   BK university logo drawn as letter quads on the +Y face of the disc. */
+   Disc axis along Z (glRotatef 90 around X), centred at gimbal2 origin.
+   BK TP.HCM logo: disc + 3 rhombus prisms form ONE unified 3D section.
+   Prisms sit on front face of disc — logo and body are inseparable. */
 static void drawRotor(void) {
-    float fy;   /* y-coordinate of disc top face */
+    float s  = 0.6;                     /* hexagon outer radius */
+    float h  = s * 0.866f;               /* = s * sqrt(3)/2 */
+    float zF = ROTOR_H * 0.5f + 0.003f;  /* disc front face */
+    float d  = 0.2f;                    /* prism depth raised above disc */
 
-    /* Main disc — low slice count gives angular/hexagonal faceted look (matching demo) */
-    glColor3f(0.10f, 0.25f, 0.65f);   /* dark blue */
-    glPushMatrix();
-        glTranslatef(0.0f, -ROTOR_H * 0.5f, 0.0f);
-        drawCylinder(ROTOR_R, ROTOR_H, ROTOR_SL);
-    glPopMatrix();
+    /* ---- Disc base ----
+       glRotatef(90,X): +Y maps to +Z → cylinder axis = Z.
+       Translate (0,0,-ROTOR_H/2) so disc centre = gimbal2 origin. */
 
-    /* BK logo: white letter quads on the top face of the disc
-       Letters centred at x=0, z=0; fit within disc radius 0.62.
-       B occupies x[-0.255, -0.015], K occupies x[0.045, 0.255], z height +-0.15. */
-    fy = ROTOR_H * 0.5f + 0.003f;   /* tiny offset above face to avoid z-fight */
-    glColor3f(1.00f, 1.00f, 1.00f);
-    glNormal3f(0.0f, 1.0f, 0.0f);
 
-    /* ---- Letter B (6 quads) ---- */
-    /* vertical bar */
-    glBegin(GL_QUADS);
-        glVertex3f(-0.255f,fy,-0.150f); glVertex3f(-0.195f,fy,-0.150f);
-        glVertex3f(-0.195f,fy, 0.150f); glVertex3f(-0.255f,fy, 0.150f);
-    glEnd();
-    /* top bar */
-    glBegin(GL_QUADS);
-        glVertex3f(-0.195f,fy, 0.100f); glVertex3f(-0.015f,fy, 0.100f);
-        glVertex3f(-0.015f,fy, 0.150f); glVertex3f(-0.195f,fy, 0.150f);
-    glEnd();
-    /* mid bar */
-    glBegin(GL_QUADS);
-        glVertex3f(-0.195f,fy,-0.020f); glVertex3f(-0.055f,fy,-0.020f);
-        glVertex3f(-0.055f,fy, 0.020f); glVertex3f(-0.195f,fy, 0.020f);
-    glEnd();
-    /* bot bar */
-    glBegin(GL_QUADS);
-        glVertex3f(-0.195f,fy,-0.150f); glVertex3f(-0.015f,fy,-0.150f);
-        glVertex3f(-0.015f,fy,-0.100f); glVertex3f(-0.195f,fy,-0.100f);
-    glEnd();
-    /* top right bump */
-    glBegin(GL_QUADS);
-        glVertex3f(-0.055f,fy, 0.020f); glVertex3f(-0.015f,fy, 0.020f);
-        glVertex3f(-0.015f,fy, 0.100f); glVertex3f(-0.055f,fy, 0.100f);
-    glEnd();
-    /* bot right bump */
-    glBegin(GL_QUADS);
-        glVertex3f(-0.055f,fy,-0.100f); glVertex3f(-0.015f,fy,-0.100f);
-        glVertex3f(-0.015f,fy,-0.020f); glVertex3f(-0.055f,fy,-0.020f);
-    glEnd();
+    /* ---- BK TP.HCM hexagonal cube logo ----
+       3 rhombus prisms — logo + 3D depth in one block.
+       All wound CW from front (+Z). Vertices (X=right, Y=up):
+         Center    ( 0,     0   )
+         Top-left  (-h,  +s/2  )
+         Top       ( 0,  +s    )
+         Top-right (+h,  +s/2  )
+         Bot-right (+h,  -s/2  )
+         Bottom    ( 0,  -s    )
+         Bot-left  (-h,  -s/2  ) */
 
-    /* ---- Letter K (5 quads) ---- */
-    /* vertical bar */
-    glBegin(GL_QUADS);
-        glVertex3f( 0.045f,fy,-0.150f); glVertex3f( 0.105f,fy,-0.150f);
-        glVertex3f( 0.105f,fy, 0.150f); glVertex3f( 0.045f,fy, 0.150f);
-    glEnd();
-    /* upper diagonal step 1 (low-middle) */
-    glBegin(GL_QUADS);
-        glVertex3f( 0.105f,fy, 0.030f); glVertex3f( 0.165f,fy, 0.030f);
-        glVertex3f( 0.165f,fy, 0.090f); glVertex3f( 0.105f,fy, 0.090f);
-    glEnd();
-    /* upper diagonal step 2 (high) */
-    glBegin(GL_QUADS);
-        glVertex3f( 0.165f,fy, 0.090f); glVertex3f( 0.255f,fy, 0.090f);
-        glVertex3f( 0.255f,fy, 0.150f); glVertex3f( 0.165f,fy, 0.150f);
-    glEnd();
-    /* lower diagonal step 1 */
-    glBegin(GL_QUADS);
-        glVertex3f( 0.105f,fy,-0.090f); glVertex3f( 0.165f,fy,-0.090f);
-        glVertex3f( 0.165f,fy,-0.030f); glVertex3f( 0.105f,fy,-0.030f);
-    glEnd();
-    /* lower diagonal step 2 */
-    glBegin(GL_QUADS);
-        glVertex3f( 0.165f,fy,-0.150f); glVertex3f( 0.255f,fy,-0.150f);
-        glVertex3f( 0.255f,fy,-0.090f); glVertex3f( 0.165f,fy,-0.090f);
-    glEnd();
+    /* Top rhombus prism — dark navy */
+    glColor3f(0.00f, 0.13f, 0.38f);
+    drawRhombusPrism( 0.0f,  0.0f,
+                     -h,     s*0.5f,
+                      0.0f,  s,
+                      h,     s*0.5f,  zF, d);
 
-    /* Old logo: two white torus rings on top face (replaced by BK letter quads above)
-    glColor3f(1.00f, 1.00f, 1.00f);
-    glPushMatrix();
-        glTranslatef(0.0f, ROTOR_H * 0.5f, 0.0f);
-        glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
-        drawTorus(0.04f, 0.28f, 24);
-    glPopMatrix();
-    glPushMatrix();
-        glTranslatef(0.0f, ROTOR_H * 0.5f, 0.0f);
-        glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
-        drawTorus(0.03f, 0.13f, 24);
-    glPopMatrix();
+    /* Left rhombus prism — medium blue (CW: center→bottom→bot-left→top-left) */
+    glColor3f(0.00f, 0.27f, 0.63f);
+    drawRhombusPrism( 0.0f,  0.0f,
+                      0.0f, -s,
+                     -h,    -s*0.5f,
+                     -h,     s*0.5f,  zF, d);
+
+    /* Right rhombus prism — sky blue (CW: center→top-right→bot-right→bottom) */
+    glColor3f(0.00f, 0.63f, 0.86f);
+    drawRhombusPrism( 0.0f,  0.0f,
+                      h,     s*0.5f,
+                      h,    -s*0.5f,
+                      0.0f, -s,       zF, d);
+
+
+    /* Old flat rhombus quads (replaced by prisms above):
+    glNormal3f(0,0,1);
+    glColor3f(0,0.13f,0.38f);
+    glBegin(GL_QUADS);
+        glVertex3f(0,0,zF); glVertex3f(-h,s*0.5f,zF); ...
+    glEnd(); [x3 blocks]
     */
 }
 
@@ -466,15 +488,14 @@ static void display(void) {
                 glRotatef(gimbal1_angle, 1.0f, 0.0f, 0.0f);
                 drawGimbal1();
 
-                /* Gimbal 2 rotates around Z (gimbal 1 pin axis) */
+                /* Gimbal 2 rotates around Y (gimbal 1 pin axis) */
                 glPushMatrix();
-                    glRotatef(gimbal2_angle, 0.0f, 0.0f, 1.0f);
+                    glRotatef(gimbal2_angle, 0.0f, 1.0f, 0.0f);
                     drawGimbal2();
-                    drawAxis();
 
-                    /* Rotor spins around Y (the axis rod) */
+                    /* Rotor spins around Z (disc axis = Z) */
                     glPushMatrix();
-                        glRotatef(rotor_angle, 0.0f, 1.0f, 0.0f);
+                        glRotatef(90.0f, 0.0f, 1.0f, 0.0f);
                         drawRotor();
                     glPopMatrix();
                 glPopMatrix();
