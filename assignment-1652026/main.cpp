@@ -16,12 +16,6 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-/* ============================================================
-   Primitive drawing functions (Chapter 03 style)
-   -- no Mesh class, no malloc, just glBegin/glEnd
-   ============================================================ */
-
-/* Cylinder along +Y, from y=0 to y=h */
 static void drawCylinder(float r, float h, int sl) {
     int i;
     float a, step = 2.0f * (float)M_PI / sl;
@@ -112,7 +106,7 @@ static int smooth_shading  = 1;
 #define DISC_R  0.80f   /* compact disc */
 #define DISC_H  0.20f
 #define STEM_R  0.14f   /* single red stem rising from disc centre */
-#define STEM_H  1.60f   /* stem height: DISC_H + STEM_H = frame ring centre */
+#define STEM_H  1.20f   /* stem height — gives clear gap between disc and frame ring */
 
 /* Old two-post wide disc design (removed - did not match demo)
 #define DISC_R  1.70f
@@ -122,41 +116,41 @@ static int smooth_shading  = 1;
 */
 
 /* ---- FRAME position ---- */
-/* FRAME_Y defined after BASE so DISC_H and STEM_H are already known */
-#define FRAME_Y      (DISC_H + STEM_H)  /* = 0.20 + 1.60 = 1.80 */
 #define FRAME_RING_R  1.50f
-#define FRAME_TUBE_R  0.12f
+/* FRAME_Y = stem top + FRAME_RING_R so the ring BOTTOM sits on the stem top.
+   Old: (DISC_H + STEM_H) = ring CENTRE at stem top (ring floated half-inside stem)
+   New: (DISC_H + STEM_H + FRAME_RING_R) = ring CENTRE one radius above stem top */
+#define FRAME_Y      (DISC_H + STEM_H + FRAME_RING_R)
+#define FRAME_TUBE_R  0.10f   /* thinner tube matching demo */
 #define FRAME_PIN_R   0.08f
 #define FRAME_PIN_H   0.35f
 
-/* ---- GIMBAL 1 ---- */
-/* Green ring inside frame.
-   Rotates around X axis (frame pin axis).
-   Two short pins at TOP and BOTTOM of ring (y = +- G1_RING_R) pointing in +-Z.
-   These define the Z-axis pivot for gimbal 2. */
-#define G1_RING_R  1.10f
-#define G1_TUBE_R  0.10f
-#define G1_PIN_R   0.07f
-#define G1_PIN_H   0.30f
+/* ---- GIMBAL 1 (blue ring) ---- */
+/* Rotates around X axis (frame pin axis).
+   Top/bottom pins removed — not visible in demo, no visual benefit. */
+#define G1_RING_R  1.12f   /* increased to close gap with frame ring (was 1.10) */
+#define G1_TUBE_R  0.09f
 
-/* ---- GIMBAL 2 ---- */
-/* Red ring inside gimbal 1.
-   Rotates around Z axis (gimbal 1 pin axis).
-   Only one torus -- no cylinders required. */
-#define G2_RING_R  0.68f
-#define G2_TUBE_R  0.09f
+/* ---- GIMBAL 2 (green ring) ---- */
+/* Rotates around Z axis.
+   Wider gap from gimbal 1 so rotor has room.
+   Two green pins at +- X = visible green horizontal bars in demo. */
+#define G2_RING_R  0.78f
+#define G2_TUBE_R  0.08f
+#define G2_PIN_R   0.06f
+#define G2_PIN_H   0.25f
 
 /* ---- AXIS (Truc) ---- */
-/* Red cylinder centred at gimbal 2 origin, along Y.
-   Extends +- AXIS_H/2 so it stays within the gimbal 2 ring. */
-#define AXIS_R   0.06f
-#define AXIS_H   1.00f
+/* Very thin red rod — barely visible in demo */
+#define AXIS_R   0.035f
+#define AXIS_H   1.10f
 
 /* ---- ROTOR (Dia quay) ---- */
-/* Blue flat disc spinning around Y axis (the axis rod).
-   Radius slightly smaller than gimbal 2 ring. */
-#define ROTOR_R   0.52f
-#define ROTOR_H   0.12f
+/* LARGE angular disc — fills most of gimbal 2 interior (matching demo).
+   Low slice count (8) gives hexagonal/angular faceted appearance. */
+#define ROTOR_R   0.62f   /* nearly fills G2_RING_R = 0.78 */
+#define ROTOR_H   0.24f   /* thick disc */
+#define ROTOR_SL  8       /* 8 faces = octagonal angular look */
 
 /* ============================================================
    Draw parts
@@ -194,7 +188,7 @@ static void drawBase(void) {
    Two short purple pivot pins at +- X on the ring surface.
    The pins slot into the upright post tops -- frame rotates around X. */
 static void drawFrame(void) {
-    glColor3f(0.80f, 0.00f, 1.00f);   /* purple */
+    glColor3f(0.90f, 0.10f, 0.10f);   /* red - matching demo (was purple) */
 
     /* Upright ring: drawTorus builds in XZ plane, rotate 90 deg around X -> XY plane */
     glPushMatrix();
@@ -202,17 +196,17 @@ static void drawFrame(void) {
         drawTorus(FRAME_TUBE_R, FRAME_RING_R, SL);
     glPopMatrix();
 
-    /* Right pivot pin at (+FRAME_RING_R, 0, 0) extending along +X */
+    /* Right pivot pin at (+FRAME_RING_R, 0, 0) extending INWARD along -X */
     glPushMatrix();
         glTranslatef(FRAME_RING_R, 0.0f, 0.0f);
-        glRotatef(-90.0f, 0.0f, 0.0f, 1.0f);   /* rotate so cylinder axis aligns +X */
+        glRotatef(90.0f, 0.0f, 0.0f, 1.0f);    /* +90 maps +Y -> -X = inward */
         drawCylinder(FRAME_PIN_R, FRAME_PIN_H, 16);
     glPopMatrix();
 
-    /* Left pivot pin at (-FRAME_RING_R, 0, 0) extending along -X */
+    /* Left pivot pin at (-FRAME_RING_R, 0, 0) extending INWARD along +X */
     glPushMatrix();
         glTranslatef(-FRAME_RING_R, 0.0f, 0.0f);
-        glRotatef(90.0f, 0.0f, 0.0f, 1.0f);    /* rotate so cylinder axis aligns -X */
+        glRotatef(-90.0f, 0.0f, 0.0f, 1.0f);   /* -90 maps +Y -> +X = inward */
         drawCylinder(FRAME_PIN_R, FRAME_PIN_H, 16);
     glPopMatrix();
 }
@@ -223,7 +217,7 @@ static void drawFrame(void) {
    Two pivot pins at TOP and BOTTOM of ring (y = +- G1_RING_R) pointing in +-Z.
    Pins are ON the ring surface -- they define the Z-axis pivot for gimbal 2. */
 static void drawGimbal1(void) {
-    glColor3f(0.10f, 0.80f, 0.10f);   /* green */
+    glColor3f(0.10f, 0.20f, 0.85f);   /* blue */
 
     /* Upright ring in XY plane */
     glPushMatrix();
@@ -231,33 +225,47 @@ static void drawGimbal1(void) {
         drawTorus(G1_TUBE_R, G1_RING_R, SL);
     glPopMatrix();
 
-    /* Top pin at (0, +G1_RING_R, 0) extending along +Z (toward viewer).
-       glRotatef(90, 1,0,0) maps +Y -> +Z so the cylinder extends along +Z. */
+    /* Top pin at (0, +G1_RING_R, 0) extending toward viewer along +Z */
     glPushMatrix();
         glTranslatef(0.0f, G1_RING_R, 0.0f);
-        glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
-        drawCylinder(G1_PIN_R, G1_PIN_H, 16);
+        glRotatef(90.0f, 1.0f, 0.0f, 0.0f);   /* 90 deg around X: +Y -> +Z */
+        drawCylinder(G2_PIN_R, G2_PIN_H, 16);
     glPopMatrix();
 
-    /* Bottom pin at (0, -G1_RING_R, 0) extending along -Z (away from viewer).
-       glRotatef(-90, 1,0,0) maps +Y -> -Z so the cylinder extends along -Z. */
+    /* Bottom pin at (0, -G1_RING_R, 0) extending away from viewer along -Z */
     glPushMatrix();
         glTranslatef(0.0f, -G1_RING_R, 0.0f);
-        glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);
-        drawCylinder(G1_PIN_R, G1_PIN_H, 16);
+        glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);  /* -90 deg around X: +Y -> -Z */
+        drawCylinder(G2_PIN_R, G2_PIN_H, 16);
     glPopMatrix();
 }
 
 /* --- GIMBAL 2 ---
-   Red ring inside gimbal 1.
+   GREEN ring inside gimbal 1 (matching demo).
    Rotates around Z axis when key 5/6 pressed.
-   Only one torus shape (no cylinders required by spec). */
+   Two green pins at +- X define the axis on which the rotor sits.
+   These are the visible green horizontal bars seen in the demo. */
 static void drawGimbal2(void) {
-    glColor3f(0.90f, 0.10f, 0.10f);   /* red */
+    glColor3f(0.10f, 0.80f, 0.10f);   /* green - was red, fixed to match demo */
 
+    /* Ring in XY plane */
     glPushMatrix();
         glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
         drawTorus(G2_TUBE_R, G2_RING_R, SL);
+    glPopMatrix();
+
+    /* Right pin at (+G2_RING_R, 0, 0) extending along +X */
+    glPushMatrix();
+        glTranslatef(G2_RING_R, 0.0f, 0.0f);
+        glRotatef(90.0f, 0.0f, 0.0f, 1.0f);
+        drawCylinder(G2_PIN_R, G2_PIN_H, 16);
+    glPopMatrix();
+
+    /* Left pin at (-G2_RING_R, 0, 0) extending along -X */
+    glPushMatrix();
+        glTranslatef(-G2_RING_R, 0.0f, 0.0f);
+        glRotatef(-90.0f, 0.0f, 0.0f, 1.0f);
+        drawCylinder(G2_PIN_R, G2_PIN_H, 16);
     glPopMatrix();
 }
 
@@ -275,27 +283,141 @@ static void drawAxis(void) {
 /* --- ROTOR (Dia quay) ---
    Blue flat disc centred at gimbal 2 origin.
    Spins around Y axis (the axis rod) when key 7/8 pressed.
-   Two small white torus rings on the front face represent BK logo markings. */
+   BK university logo drawn as letter quads on the +Y face of the disc. */
 static void drawRotor(void) {
-    /* Main disc -- centred vertically on gimbal 2 origin */
+    float fy;   /* y-coordinate of disc top face */
+
+    /* Main disc — low slice count gives angular/hexagonal faceted look (matching demo) */
     glColor3f(0.10f, 0.25f, 0.65f);   /* dark blue */
     glPushMatrix();
         glTranslatef(0.0f, -ROTOR_H * 0.5f, 0.0f);
-        drawCylinder(ROTOR_R, ROTOR_H, SL);
+        drawCylinder(ROTOR_R, ROTOR_H, ROTOR_SL);
     glPopMatrix();
 
-    /* BK logo markings: two white rings on the +Y face of the disc */
-    glColor3f(1.00f, 1.00f, 1.00f);   /* white */
+    /* BK logo: white letter quads on the top face of the disc
+       Letters centred at x=0, z=0; fit within disc radius 0.62.
+       B occupies x[-0.255, -0.015], K occupies x[0.045, 0.255], z height +-0.15. */
+    fy = ROTOR_H * 0.5f + 0.003f;   /* tiny offset above face to avoid z-fight */
+    glColor3f(1.00f, 1.00f, 1.00f);
+    glNormal3f(0.0f, 1.0f, 0.0f);
+
+    /* ---- Letter B (6 quads) ---- */
+    /* vertical bar */
+    glBegin(GL_QUADS);
+        glVertex3f(-0.255f,fy,-0.150f); glVertex3f(-0.195f,fy,-0.150f);
+        glVertex3f(-0.195f,fy, 0.150f); glVertex3f(-0.255f,fy, 0.150f);
+    glEnd();
+    /* top bar */
+    glBegin(GL_QUADS);
+        glVertex3f(-0.195f,fy, 0.100f); glVertex3f(-0.015f,fy, 0.100f);
+        glVertex3f(-0.015f,fy, 0.150f); glVertex3f(-0.195f,fy, 0.150f);
+    glEnd();
+    /* mid bar */
+    glBegin(GL_QUADS);
+        glVertex3f(-0.195f,fy,-0.020f); glVertex3f(-0.055f,fy,-0.020f);
+        glVertex3f(-0.055f,fy, 0.020f); glVertex3f(-0.195f,fy, 0.020f);
+    glEnd();
+    /* bot bar */
+    glBegin(GL_QUADS);
+        glVertex3f(-0.195f,fy,-0.150f); glVertex3f(-0.015f,fy,-0.150f);
+        glVertex3f(-0.015f,fy,-0.100f); glVertex3f(-0.195f,fy,-0.100f);
+    glEnd();
+    /* top right bump */
+    glBegin(GL_QUADS);
+        glVertex3f(-0.055f,fy, 0.020f); glVertex3f(-0.015f,fy, 0.020f);
+        glVertex3f(-0.015f,fy, 0.100f); glVertex3f(-0.055f,fy, 0.100f);
+    glEnd();
+    /* bot right bump */
+    glBegin(GL_QUADS);
+        glVertex3f(-0.055f,fy,-0.100f); glVertex3f(-0.015f,fy,-0.100f);
+        glVertex3f(-0.015f,fy,-0.020f); glVertex3f(-0.055f,fy,-0.020f);
+    glEnd();
+
+    /* ---- Letter K (5 quads) ---- */
+    /* vertical bar */
+    glBegin(GL_QUADS);
+        glVertex3f( 0.045f,fy,-0.150f); glVertex3f( 0.105f,fy,-0.150f);
+        glVertex3f( 0.105f,fy, 0.150f); glVertex3f( 0.045f,fy, 0.150f);
+    glEnd();
+    /* upper diagonal step 1 (low-middle) */
+    glBegin(GL_QUADS);
+        glVertex3f( 0.105f,fy, 0.030f); glVertex3f( 0.165f,fy, 0.030f);
+        glVertex3f( 0.165f,fy, 0.090f); glVertex3f( 0.105f,fy, 0.090f);
+    glEnd();
+    /* upper diagonal step 2 (high) */
+    glBegin(GL_QUADS);
+        glVertex3f( 0.165f,fy, 0.090f); glVertex3f( 0.255f,fy, 0.090f);
+        glVertex3f( 0.255f,fy, 0.150f); glVertex3f( 0.165f,fy, 0.150f);
+    glEnd();
+    /* lower diagonal step 1 */
+    glBegin(GL_QUADS);
+        glVertex3f( 0.105f,fy,-0.090f); glVertex3f( 0.165f,fy,-0.090f);
+        glVertex3f( 0.165f,fy,-0.030f); glVertex3f( 0.105f,fy,-0.030f);
+    glEnd();
+    /* lower diagonal step 2 */
+    glBegin(GL_QUADS);
+        glVertex3f( 0.165f,fy,-0.150f); glVertex3f( 0.255f,fy,-0.150f);
+        glVertex3f( 0.255f,fy,-0.090f); glVertex3f( 0.165f,fy,-0.090f);
+    glEnd();
+
+    /* Old logo: two white torus rings on top face (replaced by BK letter quads above)
+    glColor3f(1.00f, 1.00f, 1.00f);
     glPushMatrix();
         glTranslatef(0.0f, ROTOR_H * 0.5f, 0.0f);
         glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
-        drawTorus(0.04f, 0.28f, 24);   /* outer logo ring */
+        drawTorus(0.04f, 0.28f, 24);
     glPopMatrix();
     glPushMatrix();
         glTranslatef(0.0f, ROTOR_H * 0.5f, 0.0f);
         glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
-        drawTorus(0.03f, 0.13f, 24);   /* inner logo ring */
+        drawTorus(0.03f, 0.13f, 24);
     glPopMatrix();
+    */
+}
+
+/* --- FLOOR ---
+   20x10 tile grid = 100 tiles (20 along X, 10 along Z).
+   Each tile: full-tile dark grout + inner lighter surface (border effect).
+   Checkerboard two-tone tiles give patterned appearance.
+   Centred at origin, flat at y = 0. */
+static void drawFloor(void) {
+    int i, j;
+    const float TILE = 1.0f;
+    const int   NX   = 20;
+    const int   NZ   = 10;
+    const float OX   = -NX * TILE * 0.5f;   /* left edge  = -10 */
+    const float OZ   = -NZ * TILE * 0.5f;   /* front edge =  -5 */
+    const float BRD  = 0.05f;               /* grout border width */
+    float x0, z0, x1, z1;
+
+    glNormal3f(0.0f, 1.0f, 0.0f);
+
+    for (j = 0; j < NZ; j++) {
+        for (i = 0; i < NX; i++) {
+            x0 = OX + i * TILE;  x1 = x0 + TILE;
+            z0 = OZ + j * TILE;  z1 = z0 + TILE;
+
+            /* Grout layer — draw full tile in dark colour first */
+            glColor3f(0.25f, 0.25f, 0.28f);
+            glBegin(GL_QUADS);
+                glVertex3f(x0, 0.0f, z0); glVertex3f(x1, 0.0f, z0);
+                glVertex3f(x1, 0.0f, z1); glVertex3f(x0, 0.0f, z1);
+            glEnd();
+
+            /* Tile surface — alternating light / dark (checkerboard) */
+            if ((i + j) % 2 == 0)
+                glColor3f(0.72f, 0.72f, 0.78f);   /* light tile */
+            else
+                glColor3f(0.52f, 0.52f, 0.58f);   /* dark tile */
+
+            glBegin(GL_QUADS);
+                glVertex3f(x0+BRD, 0.001f, z0+BRD);
+                glVertex3f(x1-BRD, 0.001f, z0+BRD);
+                glVertex3f(x1-BRD, 0.001f, z1-BRD);
+                glVertex3f(x0+BRD, 0.001f, z1-BRD);
+            glEnd();
+        }
+    }
 }
 
 /* ============================================================
@@ -324,6 +446,9 @@ static void display(void) {
 
     /* Shading (Chapter 08) */
     glShadeModel(smooth_shading ? GL_SMOOTH : GL_FLAT);
+
+    /* Floor: drawn before device so it is in world space (not rotated with base) */
+    drawFloor();
 
     /* ---- Scene hierarchy (Chapter 06: glPushMatrix / glPopMatrix) ---- */
     glPushMatrix();
@@ -416,7 +541,7 @@ int main(int argc, char *argv[]) {
     glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH);
 
     /* Window title MUST include name and student ID (-1 pt if missing) */
-    glutCreateWindow("Gyroscope - Student 1652026");
+    glutCreateWindow("Gyroscope - Pham Le The Anh - 1652026");
 
     glutReshapeFunc(resize);
     glutDisplayFunc(display);
