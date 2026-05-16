@@ -1,7 +1,3 @@
-/*
- * Gyroscope Assignment - 1652026
- * DHMT 2025-2026 HK II
- */
 
 #ifdef __APPLE__
 #include <GLUT/glut.h>
